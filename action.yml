@@ -1,0 +1,57 @@
+name: 'Base x402 CI'
+description: 'Runs the planted-twin regression suite against a live x402 facilitator or resource-server on Base.'
+author: 'caliperforge'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+# Adopter contract: five lines under `with:` (facilitator, chain, rpc-url,
+# operator-key, and optionally variants/fail-on). See docs/action.md for
+# the full inputs/outputs table + secrets contract.
+#
+# Runs on GH-hosted or self-hosted Linux runners via the pinned Foundry
+# container image built from the Dockerfile in this repo.
+#
+# The `operator-key` input is masked in Actions logs via `::add-mask::`
+# as the first executable line of entrypoint.sh; it is never written to
+# the workspace and never passed as an argv value where `ps` would see it.
+
+inputs:
+  facilitator:
+    description: 'Deployed x402 facilitator address (0x-prefixed) or HTTP endpoint URL to run the harness against.'
+    required: true
+  chain:
+    description: 'Base chain the harness runs against. One of: base-mainnet, base-sepolia.'
+    required: true
+    default: 'base-sepolia'
+  rpc-url:
+    description: 'RPC endpoint URL for the target chain. Store as a secret (Alchemy, Infura, QuickNode, self-hosted). Never inline the URL in the workflow file.'
+    required: true
+  operator-key:
+    description: 'Private key of the burner wallet used to sign test EIP-3009 authorizations. Store as a secret. Never reuse a wallet with production balances. Fund only enough to cover test gas.'
+    required: true
+  variants:
+    description: 'Comma-separated variant IDs to run. Default: all published planted twins. Example: V01,V02.'
+    required: false
+    default: 'V01,V02,V03,V04,V05,V06'
+  fail-on:
+    description: 'Behavior when a planted variant does not surface the INVARIANT VIOLATED marker. One of: fail (CI fails), warn (annotate only, exit 0).'
+    required: false
+    default: 'fail'
+
+outputs:
+  report-path:
+    description: 'Absolute path to the run report JSON inside the workspace.'
+  variants-passed:
+    description: 'Comma-separated list of clean-leg variants that passed.'
+  variants-fired:
+    description: 'Comma-separated list of planted-leg variants that surfaced the INVARIANT VIOLATED marker.'
+
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  # Inputs flow via INPUT_* env vars (GH Actions auto-sets these for
+  # every declared input on container actions). Passing on argv would
+  # expose the operator-key in /proc/self/cmdline to any process the
+  # container spawns; env-only closes that surface. entrypoint.sh
+  # already reads INPUT_OPERATOR_KEY (etc.) via its fallback.

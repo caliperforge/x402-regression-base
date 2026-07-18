@@ -1,0 +1,38 @@
+name: base-x402-ci
+
+# Adopter-facing template. Drop this file into a Base facilitator or
+# resource-server repo at .github/workflows/base-x402-ci.yml, add the
+# four secrets referenced below, and CI runs the planted-twin
+# regression suite against your live facilitator on every push + PR.
+#
+# This template is fictional; no external facilitator team has integrated
+# as of publication. The full walkthrough (secrets setup, burner-wallet
+# provisioning, expected-output screenshots) lives at ../README.md
+# (populated by W4).
+#
+# Pin to a specific release tag (@v0.1.0), not the rolling @v0 alias,
+# to keep your CI stable across our releases.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: base-x402-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  x402-ci:
+    name: base-x402-ci (planted-twin regression against live facilitator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: caliperforge/x402-regression-base@v0.1.0
+        with:
+          facilitator:  ${{ secrets.FACILITATOR_URL }}
+          chain:        base-sepolia
+          rpc-url:      ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          operator-key: ${{ secrets.OPERATOR_KEY }}

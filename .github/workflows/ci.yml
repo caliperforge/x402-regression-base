@@ -1,0 +1,116 @@
+name: ci
+
+# x402-regression-base CI - M1 W1 scaffold.
+#
+# Implements the clean/planted matrix + one-command runner. `run.sh` drives the
+# discovery + summary; the CI workflow wraps it so both local and CI paths share
+# the same runner.
+#
+# Live-chain jobs (`live-sepolia.yml`, `live-mainnet.yml`) are owned by W2 + W6
+# and land as separate workflow files under `.github/workflows/`.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FOUNDRY_PROFILE: ci
+
+jobs:
+  library-build:
+    name: library-build (forge build src/ test/)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Foundry setup (pinned)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: forge build
+        run: forge build --sizes
+
+  clean-legs-pass:
+    name: clean-legs-pass (every clean twin passes silently)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: library-build
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Foundry setup (pinned)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: forge test (clean legs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Clean legs live under test/V0N_*/*.t.sol. None should surface the
+          # INVARIANT VIOLATED marker.
+          out=$(forge test --match-path 'test/V0*/**/*.t.sol' -vv)
+          echo "$out"
+          if echo "$out" | grep -q "INVARIANT VIOLATED"; then
+            echo "::error::clean leg produced INVARIANT VIOLATED marker"
+            exit 1
+          fi
+
+  planted-legs-fire:
+    name: planted-legs-fire (every planted twin fires INVARIANT VIOLATED)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: library-build
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Foundry setup (pinned)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: run.sh (full clean + planted matrix)
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./run.sh
+          ./run.sh
+
+  # macOS lane: run.sh matrix also runs on macos-latest to catch bash-3.2
+  # / macOS tool-flag drift early.
+  runner-integration-macos:
+    name: runner-integration-macos (./run.sh on macos-latest)
+    runs-on: macos-latest
+    timeout-minutes: 25
+    needs: library-build
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Foundry setup (pinned)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: ./run.sh
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x ./run.sh
+          ./run.sh

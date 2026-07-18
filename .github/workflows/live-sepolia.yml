@@ -1,0 +1,79 @@
+name: live-sepolia
+
+# Runs the deploy + settle smoke against Base Sepolia (chainId 84532), plus
+# the planted-twin harness pointed at the freshly deployed facilitator.
+# Fires on manual dispatch or nightly. Uses Actions secrets only; no key
+# ever lands in the repo (M1 spec §5.8).
+#
+# Required secrets (drop into Settings -> Secrets -> Actions on the repo):
+#
+#   BASE_SEPOLIA_RPC_URL   Full RPC URL (Alchemy / Infura / QuickNode / self-hosted).
+#                          Free tier suffices for M1 volume.
+#   OPERATOR_KEY_SEPOLIA   Burner wallet private key (0x-prefixed hex).
+#                          Never reuse a wallet with production balances.
+#                          Fund via https://www.alchemy.com/faucets/base-sepolia
+#                          (or any Base Sepolia faucet) - ~0.05 Sepolia ETH suffices.
+#
+# Optional:
+#
+#   BASESCAN_API_KEY       Enables source verification on the deployed
+#                          facilitator. Not W2-blocking (§4.2 AC 5).
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_harness:
+        description: 'Skip the planted-twin fork run after settle smoke.'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: live-sepolia
+  cancel-in-progress: false
+
+jobs:
+  deploy-and-settle:
+    name: deploy X402Facilitator + settle smoke (Base Sepolia)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: base-sepolia
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Foundry setup (pinned)
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Deploy + settle + harness (Base Sepolia)
+        shell: bash
+        env:
+          X402_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          OPERATOR_KEY: ${{ secrets.OPERATOR_KEY_SEPOLIA }}
+          BASESCAN_API_KEY: ${{ secrets.BASESCAN_API_KEY }}
+          X402_SKIP_HARNESS: ${{ inputs.skip_harness == 'true' && '1' || '0' }}
+        run: |
+          # Mask the key defensively; foundry-toolchain does not mask.
+          echo "::add-mask::${OPERATOR_KEY}"
+          chmod +x ./ci/live_sepolia.sh
+          ./ci/live_sepolia.sh
+
+      - name: Upload Basescan record artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sepolia-run-record
+          path: docs/basescan/sepolia_run_*.md
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Upload broadcast files (auditable tx-hash provenance)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sepolia-broadcast
+          path: broadcast/**/84532/run-latest.json
+          if-no-files-found: warn
+          retention-days: 90

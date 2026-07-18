@@ -1,0 +1,71 @@
+x402-regression-base
+Copyright 2026 CaliperForge / Michael Moffett.
+
+This project's own code (everything outside `lib/`) is licensed under the
+Apache License, Version 2.0. See `LICENSE` for the full text.
+
+This NOTICE file records the third-party components this project uses and the
+license terms under which each is consumed, per Apache-2.0 §4(d).
+
+========================================================================
+This project's own code
+========================================================================
+
+The Apache-2.0 license covers THIS repository's own code: the reference
+facilitator and delegation-cap primitive under `src/facilitator/`, the payload
+builders under `src/payloads/`, the tests under `test/` (including
+`test/planted/` and `test/harness/`), the docs under `docs/`, the CI
+scaffolding under `.github/` and `ci/`, and the top-level `run.sh`,
+`README.md`, `SECURITY.md`, `CONTRIBUTING.md`, `AI_DISCLOSURE.md`,
+`coverage_map.md`, and `disclosures/TEMPLATE.md`. It does NOT cover the
+vendored upstream work described below.
+
+========================================================================
+THIRD-PARTY COMPONENT: forge-std
+========================================================================
+
+This repository consumes `forge-std` as a pinned Git submodule at
+`lib/forge-std`:
+  URL:       https://github.com/foundry-rs/forge-std
+  Placement: `lib/forge-std` (submodule pointer; this repository does not
+             redistribute forge-std source directly)
+
+`forge-std` is dual-licensed by foundry-rs under the choice of MIT or
+Apache-2.0. This project consumes `forge-std` under both licenses (the
+dual-license grant is preserved verbatim in `lib/forge-std/LICENSE-MIT`
+and `lib/forge-std/LICENSE-APACHE` at the pinned commit).
+
+========================================================================
+Reserved slot: coinbase/x402 SDK
+========================================================================
+
+The reference facilitator here (`src/facilitator/X402Facilitator.sol`) is a
+minimal implementation authored for CI use. It does not vendor the
+`coinbase/x402` reference SDK. When the SDK is vendored in a future
+milestone (M2 candidate), the vendored source path, commit, and upstream
+license grant will be recorded in this section. Until then, the reference
+facilitator's shape follows the public `coinbase/x402` protocol description
+without copying source.
+
+========================================================================
+Reference-implementation shape credits (pattern, not vendored source)
+========================================================================
+
+  - x402 protocol shape: Coinbase / x402 Foundation (coinbase/x402).
+  - EIP-3009 `TransferWithAuthorization` shape: EIP-3009 specification.
+  - `SpendPermissionManager` shape: Coinbase spend-permissions manager on Base
+    (session-key delegation-cap primitive).
+  - Circle USDC on Base mainnet:
+    `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (canonical target for
+    live-mainnet runs; not vendored here).
+
+Each of the above informs the shape of the reference facilitator and
+delegation-cap primitive; none is vendored as source. Attribution is
+preserved per pattern under Apache-2.0 §4(c).
+
+========================================================================
+Toolchain authors
+========================================================================
+
+  Foundry (forge, cast, anvil): foundry-rs.
+  Solidity: Ethereum Foundation Solidity team.

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://caliperforge.github.io/x402-regression-base/report_schema.json",
+  "title": "x402-ci-report",
+  "description": "Fixed schema for the JSON report produced by base-x402-ci at $GITHUB_WORKSPACE/x402-ci-report.json.",
+  "type": "object",
+  "required": [
+    "run_id",
+    "chain",
+    "facilitator",
+    "rpc_host",
+    "started_at",
+    "harness_exit_code",
+    "clean_passed",
+    "planted_fired",
+    "clean_failed",
+    "planted_missed"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "description": "UUID or run-<pid>-<epoch> if uuidgen is unavailable."
+    },
+    "chain": {
+      "type": "string",
+      "enum": ["base-mainnet", "base-sepolia"]
+    },
+    "facilitator": {
+      "type": "string",
+      "description": "Deployed facilitator address (0x...) or HTTP endpoint URL."
+    },
+    "rpc_host": {
+      "type": "string",
+      "description": "Host-only redaction of the RPC endpoint URL. The full URL (which may carry an API key) is intentionally omitted."
+    },
+    "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp."
+    },
+    "harness_exit_code": {
+      "type": "integer",
+      "description": "Exit code of the ci/live_<chain>.sh invocation. 0 = success; non-zero = harness or preflight failure."
+    },
+    "clean_passed": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^V[0-9]{2}$"},
+      "description": "Clean-leg variants that passed."
+    },
+    "planted_fired": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^V[0-9]{2}$"},
+      "description": "Planted-leg variants that surfaced INVARIANT VIOLATED."
+    },
+    "clean_failed": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^V[0-9]{2}$"},
+      "description": "Clean-leg variants that failed (a bug in the harness or the facilitator's clean path)."
+    },
+    "planted_missed": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^V[0-9]{2}$"},
+      "description": "Planted-leg variants that did not fire (a coverage bug in the harness OR the facilitator has a distinct spec that makes the planted twin inapplicable)."
+    }
+  }
+}

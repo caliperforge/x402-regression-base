@@ -1,0 +1,11 @@
+cache/
+out/
+broadcast/
+node_modules/
+.env
+.env.*
+*.log
+.DS_Store
+
+# lib/ is a git submodule tree - see .gitmodules once the pinned commit is finalised at public flip.
+.deploy-secrets/

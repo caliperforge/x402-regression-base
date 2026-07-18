@@ -1,0 +1,168 @@
+name: self-test-action
+
+# Dogfoods the `base-x402-ci` Action shipped from this repo.
+#
+# Two jobs:
+#
+#   dry-run-container   Fires on push + PR. Builds the container image and
+#                       invokes it with a placeholder key against an
+#                       unreachable RPC. Asserts:
+#                         - the entrypoint exits fast on RPC preflight;
+#                         - the placeholder key never appears in the job
+#                           log stream (the ::add-mask:: directive fired);
+#                         - the placeholder key never appears in
+#                           $GITHUB_WORKSPACE files.
+#                       This job requires NO secrets; it is the §4b gate
+#                       for the operator-key masking invariants.
+#
+#   live-sepolia-invoke Manual dispatch only. Invokes the Action against
+#                       W2's live Sepolia facilitator. Blocks on the
+#                       BASE_SEPOLIA_RPC_URL + OPERATOR_KEY_SEPOLIA +
+#                       SEPOLIA_FACILITATOR_ADDR Actions secrets landing
+#                       (W2 owned). Not a push gate.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'action.yml'
+      - 'Dockerfile'
+      - 'entrypoint.sh'
+      - 'ci/**'
+      - 'run.sh'
+      - '.github/workflows/self-test-action.yml'
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: self-test-action-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  dry-run-container:
+    name: dry-run (container build + entrypoint fail-fast + mask + no-leak)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: docker build (pinned Foundry base)
+        run: |
+          set -euo pipefail
+          docker build -t base-x402-ci:dry-run .
+
+      - name: Run container with unreachable RPC + placeholder key
+        id: dryrun
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          # Placeholder key: 64-hex-char 0xdead... pattern, never a real
+          # wallet. If this string ever appears in the collected log,
+          # the ::add-mask:: directive did not fire.
+          PLACEHOLDER_KEY='0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+          echo "PLACEHOLDER_KEY=${PLACEHOLDER_KEY}" >>"$GITHUB_ENV"
+
+          mkdir -p /tmp/x402ws
+          set +e
+          docker run --rm \
+            -v /tmp/x402ws:/github/workspace \
+            -e GITHUB_WORKSPACE=/github/workspace \
+            -e GITHUB_OUTPUT=/github/workspace/gh_output.txt \
+            -e GITHUB_ACTIONS=true \
+            base-x402-ci:dry-run \
+            0x0000000000000000000000000000000000000000 \
+            base-sepolia \
+            http://127.0.0.1:1/rpc \
+            "${PLACEHOLDER_KEY}" \
+            V01 \
+            fail \
+            > /tmp/x402dryrun.log 2>&1
+          echo "container_exit=$?" >>"$GITHUB_OUTPUT"
+          set -e
+          cat /tmp/x402dryrun.log
+
+      - name: Assert entrypoint exited non-zero (RPC unreachable)
+        run: |
+          set -euo pipefail
+          rc="${{ steps.dryrun.outputs.container_exit }}"
+          if [ "${rc:-0}" = "0" ]; then
+            echo "::error::entrypoint returned 0 on unreachable RPC; expected non-zero preflight failure"
+            exit 1
+          fi
+          echo "entrypoint exited ${rc} as expected"
+
+      - name: Assert placeholder key not present in job log
+        run: |
+          set -euo pipefail
+          if grep -c 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' /tmp/x402dryrun.log >/dev/null; then
+            echo "::error::placeholder key leaked to log stream; ::add-mask:: did not fire in the collected log"
+            exit 1
+          fi
+          echo "no placeholder-key occurrences in the collected log"
+
+      - name: Assert placeholder key not present in any workspace file
+        run: |
+          set -euo pipefail
+          if grep -Rc 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' /tmp/x402ws 2>/dev/null | grep -v ':0$' | grep -q '.'; then
+            echo "::error::placeholder key appears in workspace file(s); entrypoint invariant 2 breached"
+            grep -Rl 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' /tmp/x402ws || true
+            exit 1
+          fi
+          echo "no placeholder-key occurrences in workspace files"
+
+      - name: Assert entrypoint action.yml + workflow YAML parse
+        run: |
+          set -euo pipefail
+          python3 -c "import yaml; [yaml.safe_load(open(p)) for p in ['action.yml', '.github/workflows/self-test-action.yml', 'example-adopter/.github/workflows/x402-ci.yml']]; print('yaml OK')"
+
+  live-sepolia-invoke:
+    name: live-sepolia invoke (manual dispatch; needs W2 secrets)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    if: github.event_name == 'workflow_dispatch'
+    environment: base-sepolia
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: docker build
+        run: docker build -t base-x402-ci:self-test .
+
+      - name: Invoke Action against live Sepolia facilitator
+        env:
+          FACILITATOR_ADDR: ${{ secrets.SEPOLIA_FACILITATOR_ADDR }}
+          RPC_URL:          ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+          OPERATOR_KEY:     ${{ secrets.OPERATOR_KEY_SEPOLIA }}
+        run: |
+          set -uo pipefail
+          [ -n "${FACILITATOR_ADDR:-}" ] || { echo "::error::SEPOLIA_FACILITATOR_ADDR secret unset - W2 must land this"; exit 78; }
+          [ -n "${RPC_URL:-}" ]          || { echo "::error::BASE_SEPOLIA_RPC_URL secret unset - W2 must land this"; exit 78; }
+          [ -n "${OPERATOR_KEY:-}" ]     || { echo "::error::OPERATOR_KEY_SEPOLIA secret unset - W2 must land this"; exit 78; }
+          echo "::add-mask::${OPERATOR_KEY}"
+          mkdir -p /tmp/x402ws
+          docker run --rm \
+            -v /tmp/x402ws:/github/workspace \
+            -e GITHUB_WORKSPACE=/github/workspace \
+            -e GITHUB_OUTPUT=/github/workspace/gh_output.txt \
+            -e GITHUB_ACTIONS=true \
+            base-x402-ci:self-test \
+            "${FACILITATOR_ADDR}" \
+            base-sepolia \
+            "${RPC_URL}" \
+            "${OPERATOR_KEY}" \
+            V01,V02 \
+            fail
+
+      - name: Upload report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-test-sepolia-report
+          path: /tmp/x402ws/x402-ci-report.json
+          if-no-files-found: warn
+          retention-days: 30

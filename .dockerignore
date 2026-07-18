@@ -1,0 +1,19 @@
+# Keep the container image tight and key-adjacent artifacts out of layers.
+
+.git/
+.github/
+cache/
+out/
+broadcast/
+node_modules/
+.env
+.env.*
+*.log
+.DS_Store
+
+# Docs + example-adopter aren't needed at runtime.
+docs/
+example-adopter/
+
+# Staging artifacts.
+disclosures/

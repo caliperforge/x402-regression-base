@@ -1,0 +1,9 @@
+# Adopter template safety: prevent a cargo-copy from committing an operator
+# key or build artefact by accident. Schema only; no adopter-repo-specific
+# entries.
+
+.env
+.env.*
+broadcast/
+out/
+cache/
