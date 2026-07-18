@@ -98,11 +98,26 @@ jobs:
       - name: Assert placeholder key not present in job log
         run: |
           set -euo pipefail
-          if grep -c 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' /tmp/x402dryrun.log >/dev/null; then
-            echo "::error::placeholder key leaked to log stream; ::add-mask:: did not fire in the collected log"
+          KEYHEX='deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'
+          # The entrypoint registers redaction with exactly one `::add-mask::<key>`
+          # directive. GitHub consumes that directive and redacts the value across
+          # the rendered job log. This step greps a RAW tee'd capture, which still
+          # contains that single directive line, so we strip `::add-mask::` lines
+          # (the masking mechanism, not a leak) and assert the key appears nowhere
+          # else, i.e. no accidental leak in any real log message.
+          leaked="$(grep -v '::add-mask::' /tmp/x402dryrun.log | grep -c "${KEYHEX}" || true)"
+          if [ "${leaked:-0}" -ne 0 ]; then
+            echo "::error::placeholder key leaked to log outside the mask-registration directive (${leaked} occurrence(s))"
+            grep -v '::add-mask::' /tmp/x402dryrun.log | grep -n "${KEYHEX}" || true
             exit 1
           fi
-          echo "no placeholder-key occurrences in the collected log"
+          # Confirm the mask registration actually fired at least once.
+          registered="$(grep -c "::add-mask::0x${KEYHEX}" /tmp/x402dryrun.log || true)"
+          if [ "${registered:-0}" -lt 1 ]; then
+            echo "::error::entrypoint did not emit a ::add-mask:: registration for the operator key"
+            exit 1
+          fi
+          echo "mask registered (${registered}x); no key occurrences outside the redaction directive"
 
       - name: Assert placeholder key not present in any workspace file
         run: |
