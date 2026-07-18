@@ -15,12 +15,14 @@
 
 FROM ghcr.io/foundry-rs/foundry:v1.0.0
 
-# apk on the foundry-rs alpine base. bash + jq + curl are load-bearing
-# for entrypoint.sh and ci/live_*.sh. git required for `forge install`
-# and submodule resolution. nodejs/npm reserved for the SettleSmoke
-# TypeScript path if it lands (currently pure-solidity forge script).
+# apt on the foundry-rs Debian base (foundry:v1.0.0 ships Debian, not Alpine).
+# bash + jq + curl are load-bearing for entrypoint.sh and ci/live_*.sh. git
+# required for `forge install` and submodule resolution. coreutils/util-linux/
+# findutils give GNU timeout/flock/find parity with the CI runners.
 USER root
-RUN apk add --no-cache bash git jq curl coreutils util-linux findutils
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends bash git jq curl coreutils util-linux findutils && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /action
 
